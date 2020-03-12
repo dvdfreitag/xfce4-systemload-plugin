@@ -1,0 +1,73 @@
+1.2.3 (2019/09/13)
+-----------------
+- fix possible leak
+- fix a crash when opening the properties dialog
+- tons of translation updates
+
+1.2.2 (2018/11/29)
+-----------------
+- general rework of the preferences dialog
+- set the default update interval to 0.5s (workaround for #13536)
+- tons of translation updates
+
+1.2.1 (2017/02/09)
+-----------------
+- rework sizing of the progressbar (#12948, #12974)
+- rework the use of GtkCssProvider to use a singleton
+- fix progressbar color with Gtk 3.16/3.18
+- da, is and oc translation updates
+
+1.2.0 (2016/11/01)
+-----------------
+- set progressbar trough and color minimal width/height to 4px so that it looks like with gtk+2
+- Use MemAvailable on Linux 3.14+ (#12686)
+
+1.1.99 (2016/06/05)
+-----------------
+- port to gtk+3/libxfce4ui-2/libxfce4panel-2.0
+
+1.1.2 (2014/11/21)
+-----------------
+- Support upower 0.99
+- Add a way to run a command when clicking on systemload plugin (bug #3887)
+- Pick up translation fixes (bug #11316)
+- Merge some OpenBSD compatibility patches
+
+1.1.1 (2012/06/30)
+-----------------
+- Simplify tooltip handling code
+- Better compliance with panel plugin HIG
+- Only set label angle with panel > 4.9
+- Set plugin to small in all modes except deskbar modes (bug #8944)
+- Facilitate bringing up the configuration dialog (bug #8900)
+- Fix background transparency by setting the main evbox hidden (bug #8891)
+- Changing uptime label orientation in the vertical mode
+- Compatibility with panel 4.9+
+- Use only HW_PHYSMEM64 on OpenBSD, HW_SYSMEM is deprecated
+
+1.1.0 (2012/04/18)
+-----------------
+- Fix progressbar width in vertical mode
+- Added about dialog
+- Use a single label to show uptime, either 'X days' (if > 0) or 'hh:mm' (bug #8348)
+- Add support for Solaris (bug #5743)
+- Fix memory size overflow with > 3.5GB on FreeBSD
+- Build the plugin as a module
+- Added a power-saving interval option using upower (if present at build time)
+- Added an update interval option (bug #7507)
+- Rewritten configuration dialog
+- Conditional retrieval of system stats (should use less resources!)
+- Port to libxfce4ui (bug #7077)
+- Fix transparency issues (bug #7345)
+
+1.0.0 (2010/12/10)
+-----------------
+- Translated into 34 languages, including 13 with a complete translation
+- Fix some issues with the build system
+- Fix a small memory leak
+- Adjust the way free memory is calculated, fixing bug #4215
+- Fix bar colors for some theme engines, fixing bug #3588
+- Fix display tooltip problems, fixing bug #5175
+- Improve the accuracy of CPU activity measurements, fixing bug #1076
+- Add support for GNU/kFreeBSD, fixing bug #2996
+- Make the plugin more compact visually, fixing bug #3587
