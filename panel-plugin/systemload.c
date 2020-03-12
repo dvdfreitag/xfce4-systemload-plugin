@@ -106,6 +106,8 @@ typedef struct
     guint             timeout, timeout_seconds;
     gboolean          use_timeout_seconds;
     guint             timeout_id;
+    guint             units_id;
+    guint             width;
     t_command         command;
     t_monitor         *monitor[3];
     t_uptime_monitor  *uptime;
@@ -113,6 +115,66 @@ typedef struct
     UpClient          *upower;
 #endif
 } t_global_monitor;
+
+static void
+style_progress(t_global_monitor *global)
+{
+    gint count;
+#if GTK_CHECK_VERSION (3, 16, 0)
+    GtkCssProvider *css_provider;
+    gchar *color;
+    gchar *css;
+#endif
+
+    for(count = 0; count < 3; count++)
+    {
+    #if GTK_CHECK_VERSION (3, 16, 0)
+        css_provider = gtk_css_provider_new ();
+        gtk_style_context_add_provider (
+            GTK_STYLE_CONTEXT (gtk_widget_get_style_context (GTK_WIDGET (global->monitor[count]->status))),
+            GTK_STYLE_PROVIDER (css_provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+        color = gdk_rgba_to_string(&global->monitor[count]->options.color);
+
+        css = g_strdup_printf("\
+            progressbar.horizontal trough { min-height: %dpx; }\
+            progressbar.horizontal progress { min-height: %dpx; }\
+            progressbar.vertical trough { min-width: %dpx; }\
+            progressbar.vertical progress { min-width: %dpx; }\
+            progressbar progress { background-color: %s; background-image: none; }", 
+            global->width - 4, global->width - 4, 
+            global->width - 4, global->width - 4,
+            color);
+        
+        gtk_css_provider_load_from_data (css_provider, css, -1, NULL);
+        g_free(color);
+        g_free(css);
+        g_object_set_data(G_OBJECT(global->monitor[count]->status), "css_provider", css_provider);
+    #else
+        gtk_widget_override_background_color(GTK_WIDGET(global->monitor[count]->status),
+                                GTK_STATE_PRELIGHT,
+                                &global->monitor[count]->options.color);
+        gtk_widget_override_background_color(GTK_WIDGET(global->monitor[count]->status),
+                                GTK_STATE_SELECTED,
+                                &global->monitor[count]->options.color);
+        gtk_widget_override_color(GTK_WIDGET(global->monitor[count]->status),
+                                GTK_STATE_SELECTED,
+                                &global->monitor[count]->options.color);
+    #endif
+
+        if (gtk_orientable_get_orientation(GTK_ORIENTABLE(global->monitor[count]->status)) == GTK_ORIENTATION_HORIZONTAL)
+        {
+            gtk_widget_set_size_request(GTK_WIDGET(global->monitor[count]->status),
+                                        global->width, -1);
+        }
+        else
+        {
+            gtk_widget_set_size_request(GTK_WIDGET(global->monitor[count]->status),
+                                        -1, global->width);
+        }
+    }
+}
 
 static gboolean
 spawn_system_monitor(GtkWidget *w, t_global_monitor *global)
@@ -138,6 +200,9 @@ update_monitors(t_global_monitor *global)
     gchar caption[128];
     gulong mem, swap, MTotal, MUsed, STotal, SUsed;
     gint count, days, hours, mins;
+
+    const gchar *units_str[] = { "kB", "MB", "GB" };
+    const gint units_shift[] = { 0, 10, 20 };
 
     if (global->monitor[0]->options.enabled)
         global->monitor[0]->history[0] = read_cpuload();
@@ -182,16 +247,18 @@ update_monitors(t_global_monitor *global)
 
     if (global->monitor[1]->options.enabled)
     {
-        g_snprintf(caption, sizeof(caption), _("Memory: %ldMB of %ldMB used"),
-                   MUsed >> 10 , MTotal >> 10);
+        g_snprintf(caption, sizeof(caption), _("Memory: %ld%s of %ld%s used"),
+                   MUsed >> units_shift[global->units_id], units_str[global->units_id],
+                   MTotal >> units_shift[global->units_id], units_str[global->units_id]);
         gtk_widget_set_tooltip_text(GTK_WIDGET(global->monitor[1]->ebox), caption);
     }
 
     if (global->monitor[2]->options.enabled)
     {
         if (STotal)
-            g_snprintf(caption, sizeof(caption), _("Swap: %ldMB of %ldMB used"),
-                       SUsed >> 10, STotal >> 10);
+            g_snprintf(caption, sizeof(caption), _("Swap: %ld%s of %ld%s used"),
+                       SUsed >> units_shift[global->units_id], units_str[global->units_id],
+                       STotal >> units_shift[global->units_id], units_str[global->units_id]);
         else
             g_snprintf(caption, sizeof(caption), _("No swap"));
 
@@ -247,9 +314,6 @@ static void
 create_monitor (t_global_monitor *global)
 {
     gint count;
-#if GTK_CHECK_VERSION (3, 16, 0)
-    GtkCssProvider *css_provider;
-#endif
 
     global->box = gtk_box_new(xfce_panel_plugin_get_orientation(global->plugin), 0);
     gtk_widget_show(global->box);
@@ -260,20 +324,6 @@ create_monitor (t_global_monitor *global)
             gtk_label_new(global->monitor[count]->options.label_text);
 
         global->monitor[count]->status = GTK_WIDGET(gtk_progress_bar_new());
-#if GTK_CHECK_VERSION (3, 16, 0)
-        css_provider = gtk_css_provider_new ();
-        gtk_style_context_add_provider (
-            GTK_STYLE_CONTEXT (gtk_widget_get_style_context (GTK_WIDGET (global->monitor[count]->status))),
-            GTK_STYLE_PROVIDER (css_provider),
-            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-        gtk_css_provider_load_from_data (css_provider, "\
-            progressbar.horizontal trough { min-height: 4px; }\
-            progressbar.horizontal progress { min-height: 4px; }\
-            progressbar.vertical trough { min-width: 4px; }\
-            progressbar.vertical progress { min-width: 4px; }",
-             -1, NULL);
-        g_object_set_data(G_OBJECT(global->monitor[count]->status), "css_provider", css_provider);
-#endif
 
         global->monitor[count]->box = gtk_box_new(xfce_panel_plugin_get_orientation(global->plugin), 0);
 
@@ -300,6 +350,8 @@ create_monitor (t_global_monitor *global)
 
         gtk_widget_show_all(GTK_WIDGET(global->monitor[count]->ebox));
     }
+
+    style_progress(global);
 
     global->uptime->ebox = gtk_event_box_new();
     if(global->uptime->enabled)
@@ -338,6 +390,8 @@ monitor_control_new(XfcePanelPlugin *plugin)
     global->timeout_seconds = UPDATE_TIMEOUT_SECONDS;
     global->use_timeout_seconds = TRUE;
     global->timeout_id = 0;
+    global->units_id = 1;
+    global->width = 8;
     global->ebox = gtk_event_box_new();
     gtk_widget_show(global->ebox);
     global->box = NULL;
@@ -435,9 +489,6 @@ static void
 setup_monitor(t_global_monitor *global)
 {
     gint count;
-#if GTK_CHECK_VERSION (3, 16, 0)
-    gchar *css, *color;
-#endif
 
     gtk_widget_hide(GTK_WIDGET(global->uptime->ebox));
 
@@ -448,30 +499,6 @@ setup_monitor(t_global_monitor *global)
         gtk_label_set_text(GTK_LABEL(global->monitor[count]->label),
                            global->monitor[count]->options.label_text);
 
-#if GTK_CHECK_VERSION (3, 16, 0)
-        color = gdk_rgba_to_string(&global->monitor[count]->options.color);
-#if GTK_CHECK_VERSION (3, 20, 0)
-        css = g_strdup_printf("progressbar progress { background-color: %s; background-image: none; }", color);
-#else
-        css = g_strdup_printf(".progressbar progress { background-color: %s; background-image: none; }", color);
-#endif
-        gtk_css_provider_load_from_data (
-            g_object_get_data(G_OBJECT(global->monitor[count]->status), "css_provider"),
-            css, strlen(css), NULL);
-        g_free(color);
-        g_free(css);
-#else
-        gtk_widget_override_background_color(GTK_WIDGET(global->monitor[count]->status),
-                             GTK_STATE_PRELIGHT,
-                             &global->monitor[count]->options.color);
-        gtk_widget_override_background_color(GTK_WIDGET(global->monitor[count]->status),
-                             GTK_STATE_SELECTED,
-                             &global->monitor[count]->options.color);
-        gtk_widget_override_color(GTK_WIDGET(global->monitor[count]->status),
-                               GTK_STATE_SELECTED,
-                               &global->monitor[count]->options.color);
-#endif
-
         if(global->monitor[count]->options.enabled)
         {
             gtk_widget_show(GTK_WIDGET(global->monitor[count]->ebox));
@@ -481,6 +508,9 @@ setup_monitor(t_global_monitor *global)
             gtk_widget_show(GTK_WIDGET(global->monitor[count]->status));
         }
     }
+
+    style_progress(global);
+
     if(global->uptime->enabled)
     {
         if (global->monitor[0]->options.enabled ||
@@ -532,6 +562,12 @@ monitor_read_config(XfcePanelPlugin *plugin, t_global_monitor *global)
             if (strlen(value) > 0)
                 global->command.enabled = TRUE;
         }
+        global->units_id = xfce_rc_read_int_entry(rc, "Units_ID", global->units_id);
+        if (global->units_id > 2)
+            global->units_id = 2;
+        global->width = xfce_rc_read_int_entry(rc, "Width", global->width);
+        if (global->width > 50)
+            global->width = 50;
     }
 
     for(count = 0; count < 3; count++)
@@ -591,6 +627,8 @@ monitor_write_config(XfcePanelPlugin *plugin, t_global_monitor *global)
     xfce_rc_write_int_entry (rc, "Timeout", global->timeout);
     xfce_rc_write_int_entry (rc, "Timeout_Seconds", global->timeout_seconds);
     xfce_rc_write_entry (rc, "Click_Command", global->command.command_text);
+    xfce_rc_write_int_entry(rc, "Units_ID", global->units_id);
+    xfce_rc_write_int_entry(rc, "Width", global->width);
 
     for(count = 0; count < 3; count++)
     {
@@ -631,12 +669,12 @@ monitor_set_size(XfcePanelPlugin *plugin, int size, t_global_monitor *global)
                 GTK_ORIENTATION_HORIZONTAL)
         {
             gtk_widget_set_size_request(GTK_WIDGET(global->monitor[count]->status),
-                                        8, -1);
+                                        global->width, -1);
         }
         else
         {
             gtk_widget_set_size_request(GTK_WIDGET(global->monitor[count]->status),
-                                        -1, 8);
+                                        -1, global->width);
         }
     }
 
@@ -750,6 +788,24 @@ change_timeout_seconds_cb(GtkSpinButton *spin, t_global_monitor *global)
 }
 #endif
 
+static void
+change_units_cb(GtkComboBox *box, t_global_monitor *global)
+{
+    gint value = gtk_combo_box_get_active(box);
+    if (value < 0)
+        value = 0;
+
+    global->units_id = (guint)value;
+}
+
+static void
+change_width_cb(GtkSpinButton *spin, t_global_monitor *global)
+{
+    global->width = gtk_spin_button_get_value(spin);
+
+    style_progress(global);
+}
+
 /* Creates a label, its mnemonic will point to target.
  * Returns the widget. */
 static GtkWidget *new_label (GtkGrid *grid, guint row,
@@ -837,7 +893,7 @@ monitor_create_options(XfcePanelPlugin *plugin, t_global_monitor *global)
 {
     GtkWidget           *dlg;
     GtkBox              *content;
-    GtkWidget           *grid, *label, *entry, *button;
+    GtkWidget           *grid, *label, *entry, *button, *box;
     guint                count;
     t_monitor           *monitor;
     static const gchar *FRAME_TEXT[] = {
@@ -896,6 +952,13 @@ monitor_create_options(XfcePanelPlugin *plugin, t_global_monitor *global)
     new_label (GTK_GRID (grid), 2, _("Power-saving interval:"), button);
 #endif
 
+    button = gtk_spin_button_new_with_range (8, 50, 1);
+    gtk_widget_set_halign (button, GTK_ALIGN_START);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON(button), (gfloat)global->width);
+    g_signal_connect (G_OBJECT (button), "value-changed", G_CALLBACK(change_width_cb), global);
+    gtk_grid_attach (GTK_GRID(grid), button, 1, 3, 1, 1);
+    new_label (GTK_GRID (grid), 3, _("Progressbar width:"), button);
+
     /* System Monitor */
     entry = gtk_entry_new ();
     gtk_widget_set_hexpand (entry, TRUE);
@@ -905,15 +968,25 @@ monitor_create_options(XfcePanelPlugin *plugin, t_global_monitor *global)
     gtk_widget_set_tooltip_text(GTK_WIDGET(entry), _("Launched when clicking on the plugin"));
     g_signal_connect (G_OBJECT(entry), "changed",
                       G_CALLBACK(entry_changed_cb), global);
-    gtk_grid_attach (GTK_GRID (grid), entry, 1, 3, 1, 1);
-    label = new_label (GTK_GRID (grid), 3, _("System monitor:"), entry);
+    gtk_grid_attach (GTK_GRID (grid), entry, 1, 4, 1, 1);
+    label = new_label (GTK_GRID (grid), 4, _("System monitor:"), entry);
+    
+    box = gtk_combo_box_text_new ();
+    gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (box), NULL, "Kilobytes");
+    gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (box), NULL, "Megabytes");
+    gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (box), NULL, "Gigabytes");
+    gtk_combo_box_set_active (GTK_COMBO_BOX (box), global->units_id);
+    g_signal_connect (G_OBJECT(box), "changed", 
+                      G_CALLBACK(change_units_cb), global);
+    gtk_grid_attach (GTK_GRID (grid), box, 1, 5, 1, 1);
+    label = new_label (GTK_GRID (grid), 5, _("Units:"), box);
 
     /* Add options for the three monitors */
     for(count = 0; count < 3; count++)
     {
         monitor = global->monitor[count];
 
-        new_monitor_setting(global, GTK_GRID(grid), 4 + 2 * count,
+        new_monitor_setting(global, GTK_GRID(grid), 6 + 2 * count,
                            _(FRAME_TEXT[count]),
                            &monitor->options.enabled,
                            &monitor->options.color,
@@ -922,7 +995,7 @@ monitor_create_options(XfcePanelPlugin *plugin, t_global_monitor *global)
     }
 
     /* Uptime monitor options */
-    new_monitor_setting(global, GTK_GRID(grid), 11,
+    new_monitor_setting(global, GTK_GRID(grid), 13,
                       _(FRAME_TEXT[3]), &global->uptime->enabled,
                       NULL, NULL, NULL);
 
