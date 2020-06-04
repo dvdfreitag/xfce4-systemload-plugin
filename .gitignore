@@ -22,7 +22,6 @@ m4/
 missing
 mkinstalldirs
 panel-plugin/systemload.desktop
-panel-plugin/systemload.desktop.in
 po/*.gmo
 po/.intltool-merge-cache
 po/stamp-it
